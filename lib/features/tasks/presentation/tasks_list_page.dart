@@ -72,7 +72,7 @@ class TasksListPage extends ConsumerWidget {
               : <Task>[];
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
             children: [
               if (today.isNotEmpty) ...[
                 _SectionHeader(
@@ -80,17 +80,17 @@ class TasksListPage extends ConsumerWidget {
                     count: today.length,
                     color: Theme.of(context).colorScheme.primary),
                 ...today.map((t) => _TaskTile(task: t)),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
               ],
               if (upcoming.isNotEmpty) ...[
                 _SectionHeader(title: 'Upcoming', count: upcoming.length),
                 ...upcoming.map((t) => _TaskTile(task: t)),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
               ],
               if (noDeadline.isNotEmpty) ...[
                 _SectionHeader(title: 'No Date', count: noDeadline.length),
                 ...noDeadline.map((t) => _TaskTile(task: t)),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
               ],
               if (completed.isNotEmpty) ...[
                 _SectionHeader(

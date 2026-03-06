@@ -21,13 +21,15 @@ class AppTheme {
           iconTheme: IconThemeData(color: AppColorScheme.light.onSurface),
         ),
         cardTheme: CardThemeData(
-          elevation: 0,
+          elevation: 2,
+          shadowColor: Colors.black.withOpacity(0.1),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           color: AppColorScheme.light.surfaceContainerLow,
         ),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
           backgroundColor: AppColorScheme.light.primary,
           foregroundColor: AppColorScheme.light.onPrimary,
+          elevation: 6,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
         inputDecorationTheme: InputDecorationTheme(
@@ -72,13 +74,15 @@ class AppTheme {
           iconTheme: IconThemeData(color: AppColorScheme.dark.onSurface),
         ),
         cardTheme: CardThemeData(
-          elevation: 0,
+          elevation: 2,
+          shadowColor: Colors.black.withOpacity(0.2),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           color: AppColorScheme.dark.surfaceContainerLow,
         ),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
           backgroundColor: AppColorScheme.dark.primary,
           foregroundColor: AppColorScheme.dark.onPrimary,
+          elevation: 6,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
         inputDecorationTheme: InputDecorationTheme(

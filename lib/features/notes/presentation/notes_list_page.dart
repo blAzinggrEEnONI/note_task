@@ -59,7 +59,7 @@ class _NotesListPageState extends ConsumerState<NotesListPage> {
         children: [
           // Search bar
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(

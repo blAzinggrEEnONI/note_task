@@ -25,19 +25,30 @@ class ShellPage extends StatelessWidget {
 
     return Scaffold(
       body: child,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentIndex,
-        onDestinationSelected: (i) => context.go(_tabs[i].path),
-        backgroundColor: cs.surface,
-        indicatorColor: cs.primaryContainer,
-        elevation: 0,
-        destinations: _tabs
-            .map((t) => NavigationDestination(
-                  icon: Icon(t.icon),
-                  selectedIcon: Icon(t.activeIcon, color: cs.onPrimaryContainer),
-                  label: t.label,
-                ))
-            .toList(),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 12,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: NavigationBar(
+          selectedIndex: currentIndex,
+          onDestinationSelected: (i) => context.go(_tabs[i].path),
+          backgroundColor: cs.surface,
+          indicatorColor: cs.primaryContainer,
+          elevation: 0,
+          destinations: _tabs
+              .map((t) => NavigationDestination(
+                    icon: Icon(t.icon),
+                    selectedIcon: Icon(t.activeIcon, color: cs.onPrimaryContainer),
+                    label: t.label,
+                  ))
+              .toList(),
+        ),
       ),
     );
   }
