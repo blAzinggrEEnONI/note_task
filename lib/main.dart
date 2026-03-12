@@ -16,9 +16,15 @@ Future<void> main() async {
 
   // Init notifications (timezone + channels)
   await NotificationService.init();
-  
-  // Request notification permissions (Android 13+)
+
+  // Request notification permissions (Android 13+ / API 33+)
   await NotificationService.requestPermission();
+
+  // Request exact alarm permission (Android 12+ / API 31+)
+  // This is needed for precise scheduled reminders
+  if (Platform.isAndroid) {
+    await NotificationService.requestExactAlarmPermission();
+  }
 
   runApp(
     const ProviderScope(

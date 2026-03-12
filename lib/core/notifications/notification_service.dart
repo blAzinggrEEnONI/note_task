@@ -1,7 +1,8 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:timezone/data/latest.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 class NotificationService {
@@ -14,7 +15,26 @@ class NotificationService {
 
   static Future<void> init() async {
     if (_initialized) return;
+
+    // Initialize timezone database and set local timezone
     tz.initializeTimeZones();
+    try {
+      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+    } catch (e) {
+      debugPrint('NotificationService: Could not get local timezone: $e');
+      // Fallback: try to use UTC offset-based approach
+      final offset = DateTime.now().timeZoneOffset;
+      final offsetHours = offset.inHours;
+      final sign = offsetHours >= 0 ? '+' : '-';
+      final absHours = offsetHours.abs().toString().padLeft(2, '0');
+      try {
+        // Try common timezone names based on offset
+        tz.setLocalLocation(tz.getLocation('Etc/GMT${sign == '+' ? '-' : '+'}$absHours'));
+      } catch (_) {
+        // Last resort: keep UTC
+      }
+    }
 
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -28,6 +48,7 @@ class NotificationService {
       const InitializationSettings(
           android: androidSettings, iOS: iosSettings),
       onDidReceiveNotificationResponse: _onNotificationTap,
+      onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationTap,
     );
 
     await _createDefaultChannel();
@@ -51,7 +72,8 @@ class NotificationService {
         ?.createNotificationChannel(channel);
   }
 
-  /// Schedule a task reminder. [soundFilePath] can be null for default sound.
+  /// Schedule a task reminder. [soundFilePath] is ignored on Android
+  /// (custom sounds require a raw resource; system default is used instead).
   static Future<void> scheduleReminder({
     required String taskId,
     required String taskTitle,
@@ -61,43 +83,32 @@ class NotificationService {
   }) async {
     await init();
 
+    // Ensure the scheduled time is in the future
+    if (!scheduledTime.isAfter(DateTime.now())) {
+      debugPrint('NotificationService: Skipping past reminder for $taskTitle');
+      return;
+    }
+
     final notifId = taskId.hashCode.abs() % 100000;
     final tzTime = tz.TZDateTime.from(scheduledTime, tz.local);
 
-    AndroidNotificationDetails androidDetails;
+    debugPrint(
+        'NotificationService: Scheduling "$taskTitle" at $tzTime (local: ${tz.local.name})');
 
-    if (soundFilePath != null && File(soundFilePath).existsSync()) {
-      // For custom sounds, copy file to app's external files if needed
-      final soundUri = await _prepareSoundUri(soundFilePath);
-      androidDetails = AndroidNotificationDetails(
-        _channelId,
-        _channelName,
-        channelDescription: 'Task reminder',
-        importance: Importance.max,
-        priority: Priority.max,
-        sound: UriAndroidNotificationSound(soundUri),
-        playSound: true,
-        enableVibration: true,
-        enableLights: true,
-        fullScreenIntent: true,
-        category: AndroidNotificationCategory.alarm,
-        visibility: NotificationVisibility.public,
-      );
-    } else {
-      androidDetails = const AndroidNotificationDetails(
-        _channelId,
-        _channelName,
-        channelDescription: 'Task reminder',
-        importance: Importance.max,
-        priority: Priority.max,
-        playSound: true,
-        enableVibration: true,
-        enableLights: true,
-        fullScreenIntent: true,
-        category: AndroidNotificationCategory.alarm,
-        visibility: NotificationVisibility.public,
-      );
-    }
+    const androidDetails = AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: 'Task reminder',
+      importance: Importance.max,
+      priority: Priority.max,
+      playSound: true,
+      enableVibration: true,
+      enableLights: true,
+      fullScreenIntent: true,
+      category: AndroidNotificationCategory.alarm,
+      visibility: NotificationVisibility.public,
+      autoCancel: true,
+    );
 
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -106,17 +117,39 @@ class NotificationService {
       interruptionLevel: InterruptionLevel.timeSensitive,
     );
 
-    await _plugin.zonedSchedule(
-      notifId,
-      taskTitle,
-      body ?? 'Time to work on this task!',
-      tzTime,
-      NotificationDetails(android: androidDetails, iOS: iosDetails),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: null,
-    );
+    try {
+      await _plugin.zonedSchedule(
+        notifId,
+        taskTitle,
+        body ?? 'Time to work on this task!',
+        tzTime,
+        const NotificationDetails(android: androidDetails, iOS: iosDetails),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        payload: taskId,
+      );
+      debugPrint('NotificationService: Successfully scheduled notification id=$notifId');
+    } catch (e) {
+      debugPrint('NotificationService: Failed to schedule notification: $e');
+      // Try inexact alarm as fallback (works without SCHEDULE_EXACT_ALARM permission)
+      try {
+        await _plugin.zonedSchedule(
+          notifId,
+          taskTitle,
+          body ?? 'Time to work on this task!',
+          tzTime,
+          const NotificationDetails(android: androidDetails, iOS: iosDetails),
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+          payload: taskId,
+        );
+        debugPrint('NotificationService: Scheduled with inexact alarm as fallback');
+      } catch (e2) {
+        debugPrint('NotificationService: Fallback also failed: $e2');
+      }
+    }
   }
 
   static Future<void> cancelReminder(String taskId) async {
@@ -135,44 +168,56 @@ class NotificationService {
       channelDescription: 'Test notification',
       importance: Importance.high,
       priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
     );
     const iosDetails =
         DarwinNotificationDetails(presentAlert: true, presentSound: true);
     await _plugin.show(
       _defaultNotifId,
       'NoteTask Pro',
-      'Test notification — sound is working!',
+      'Test notification — notifications are working!',
       const NotificationDetails(android: androidDetails, iOS: iosDetails),
     );
   }
 
-  static Future<String> _prepareSoundUri(String originalPath) async {
-    // Copy to app docs dir and return a content URI friendly path
-    final docsDir = await getApplicationDocumentsDirectory();
-    final soundsDir = Directory('${docsDir.path}/notification_sounds');
-    await soundsDir.create(recursive: true);
-
-    final fileName = originalPath.split('/').last;
-    final destPath = '${soundsDir.path}/$fileName';
-
-    if (!File(destPath).existsSync()) {
-      await File(originalPath).copy(destPath);
-    }
-    return destPath;
-  }
-
-  static void _onNotificationTap(NotificationResponse _) {
+  static void _onNotificationTap(NotificationResponse response) {
     // Navigation on tap is handled by router — payload = taskId
-    // Deep link routing can be added here with Navigator key
+    debugPrint('NotificationService: Notification tapped, payload=${response.payload}');
   }
 
+  /// Request notification permission (Android 13+ / API 33+).
   static Future<bool> requestPermission() async {
+    if (!Platform.isAndroid) return true;
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
-    if (android != null) {
-      final granted = await android.requestNotificationsPermission();
-      return granted ?? false;
-    }
-    return true; // iOS handles via permission_handler
+    if (android == null) return false;
+    final granted = await android.requestNotificationsPermission();
+    debugPrint('NotificationService: Notification permission granted=$granted');
+    return granted ?? false;
   }
+
+  /// Request exact alarm permission (Android 12+ / API 31+).
+  /// Returns true if permission is granted or not required.
+  static Future<bool> requestExactAlarmPermission() async {
+    if (!Platform.isAndroid) return true;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return false;
+    // Check if exact alarms are permitted
+    final permitted = await android.requestExactAlarmsPermission();
+    debugPrint('NotificationService: Exact alarm permission granted=$permitted');
+    return permitted ?? false;
+  }
+
+  /// Returns list of pending notifications (for debugging).
+  static Future<List<PendingNotificationRequest>> getPendingNotifications() async {
+    return _plugin.pendingNotificationRequests();
+  }
+}
+
+/// Top-level function required for background notification responses.
+@pragma('vm:entry-point')
+void _onBackgroundNotificationTap(NotificationResponse response) {
+  debugPrint('NotificationService: Background notification tapped, payload=${response.payload}');
 }
